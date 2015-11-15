@@ -1,4 +1,5 @@
 #include <SoftwareSerial.h>
+#include <TroykaDHT11.h>
 #include <GPRS_Shield_Arduino.h>
 #include <sim900.h>
 
@@ -17,19 +18,44 @@ char message[MESSAGE_LENGTH]; // текст сообщения
 char phone[16];               // номер, с которого пришло сообщение
 char datetime[24];            // дата отправки сообщения
 
+struct Zone zones[2];
+DHT11 * dhts[2];
+
 void setup() {
+  zones[0] = {4, 5, 0, 0, 0, };
+  zones[1] = {6, 7, 0, 0, 0};
+  
+  for (int z = 0; z < 2; z++) {
+    Zone zone = zones[z];
+    dhts[z] = new DHT11(zone.dht_pin);
+    dhts[z]->begin();
+    pinMode(zone.relay_pin, OUTPUT);
+  }
+  
   Serial.begin(9600);
 
   while (!Serial) {
     delay(1000);
   }
   
-  delay(1000);
+//  delay(1000);
 
-  test();
+//  test();
 }
 
 void loop() {
+  for (int z = 0; z < 2; z++) {
+    Serial.print("Zone ");
+    Serial.print(z);
+    Serial.print(":\n  ");
+    printZone(&zones[z]);
+    int updateResult = updateZone(&zones[z], dhts[z]);    
+    
+  }
+  
+  delay(5000);
+   
+  
    // messageIndex = gprs.isSMSunread();
    
    // if (messageIndex > 0) {
@@ -121,6 +147,20 @@ Command parseSms(char* message) {
   }  
 }
 
+void printZone(Zone * z) {
+   // выводим показания влажности и температуры
+  Serial.print("Target temp = ");
+  Serial.print(z->target_temp);
+  Serial.print("C \t");
+  Serial.print("Temperature = ");
+  Serial.print(z->last_temp);
+  Serial.print("C \t");
+  Serial.print("Humidity = ");
+  Serial.print(z->last_hum);
+  Serial.println("%");
+ 
+}
+
 void printCmd(Command cmd) {
   switch (cmd.code) {
       case k_op_heat_on:
@@ -146,5 +186,44 @@ void printCmd(Command cmd) {
   };
 }
 
+int updateZone(Zone * zone, DHT11 * dhtP) {
+    int check;
+     
+    DHT11 dht = *dhtP;
+    // считывание данных с датчика DHT11
+    check = dht.read();
+    switch (check) {
+      // всё OK
+      case DHT_OK:
+        zone->last_temp = dht.getTemperatureC();
+        zone->last_hum = dht.getHumidity();
+        break;
+      // ошибка контрольной суммы
+      case DHT_ERROR_CHECKSUM:
+        Serial.println("Checksum error");
+        break;
+      // превышение времени ожидания
+      case DHT_ERROR_TIMEOUT:
+        Serial.println("Time out error");
+        break;
+      // неизвестная ошибка
+      default:
+        Serial.println("Unknown error");
+        break;
+    }     
+    
+    //есть актуальная температура, 
+    //установлена целевая температура
+    //актуальная температура меньше целевой
+    if (check == DHT_OK
+        && zone->target_temp > 0
+        && zone->target_temp > zone->last_temp) {
+        digitalWrite(zone->relay_pin, HIGH);
+    } else {
+        digitalWrite(zone->relay_pin, LOW);
+    }
+
+    return check;
+}
 
 

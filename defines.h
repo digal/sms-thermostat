@@ -3,10 +3,13 @@
 
 #define MESSAGE_LENGTH 160
 
-struct Zone {
+typedef struct Zone {
   uint8_t dht_pin;
   uint8_t relay_pin;
   uint8_t target_temp;
+  uint8_t last_temp;
+  uint8_t last_hum;
+  int last_read_result;
 };
 
 typedef enum Opcode{
@@ -17,7 +20,7 @@ typedef enum Opcode{
   k_op_status
 };
 
-struct Command {
+typedef struct Command {
   Opcode code;
   uint8_t zone;
   uint8_t arg;
