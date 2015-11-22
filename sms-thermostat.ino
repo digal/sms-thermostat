@@ -1,3 +1,5 @@
+#include <LiquidCrystal.h>
+
 #include <SoftwareSerial.h>
 #include <TroykaDHT11.h>
 #include <GPRS_Shield_Arduino.h>
@@ -12,17 +14,42 @@ const char* k_delimiters = " ";
 const uint8_t k_default_temp = 20;
 
 
-GPRS gprs(11, 10, 1200);
+GPRS gprs(2, 3, 10, 11, 9600);
 int messageIndex = 0;         // номер сообщения в памяти сим-карты
 char message[MESSAGE_LENGTH]; // текст сообщения
 char phone[16];               // номер, с которого пришло сообщение
 char datetime[24];            // дата отправки сообщения
+LiquidCrystal lcd(A5, A4, A3, A2, A1, A0);
 
 struct Zone zones[2];
 DHT11 * dhts[2];
 
 void setup() {
-  zones[0] = {4, 5, 0, 0, 0, };
+  setupLCD();
+  setupZones();
+  setupSerialAndWait();
+  setupGPRS();
+  
+//  test();
+}
+
+void setupLCD() {
+    lcd.begin(20, 4);
+}
+
+void setupGPRS() {
+  gprs.powerUpDown();
+  
+  Serial.println("initializing GPRS");
+  while (gprs.init() != true) {
+    Serial.println("error initializing GPRS");
+    delay(1000);
+  }
+}
+
+
+void setupZones() {
+  zones[0] = {4, 5, 0, 0, 0};
   zones[1] = {6, 7, 0, 0, 0};
   
   for (int z = 0; z < 2; z++) {
@@ -31,48 +58,62 @@ void setup() {
     dhts[z]->begin();
     pinMode(zone.relay_pin, OUTPUT);
   }
-  
+}
+
+void setupSerialAndWait() {
   Serial.begin(9600);
 
   while (!Serial) {
     delay(1000);
   }
-  
-//  delay(1000);
-
-//  test();
 }
 
-void loop() {
-  for (int z = 0; z < 2; z++) {
-    Serial.print("Zone ");
-    Serial.print(z);
-    Serial.print(":\n  ");
-    printZone(&zones[z]);
-    int updateResult = updateZone(&zones[z], dhts[z]);    
-    
-  }
-  
-  delay(5000);
-   
-  
-   // messageIndex = gprs.isSMSunread();
-   
-   // if (messageIndex > 0) {
-   //   gprs.readSMS(messageIndex, message, MESSAGE_LENGTH, phone, datetime);
 
-   //   // выводим номер, с которого пришло смс
-   //   Serial.print("From number: ");
-   //   Serial.println(phone);
+
+void loop() {
+  checkSMS();
   
-   //   // выводим дату, когда пришло смс
-   //   Serial.print("Datetime: ");
-   //   Serial.println(datetime);
+//  for (int z = 0; z < 2; z++) {
+//    Serial.print("Zone ");
+//    Serial.print(z);
+//    Serial.print(":\n  ");
+//    printZone(&zones[z]);
+//    int updateResult = updateZone(&zones[z], dhts[z]);    
+//    
+//    printZone (z, &zones[z]);
+//  }
+//  
+  delay(5000);
+}
+
+void checkSMS() {
   
-   //   // выводим текст сообщения
-   //   Serial.print("Recieved Message: ");
-   //   Serial.println(message); 
-   // }
+   messageIndex = gprs.isSMSunread();
+   
+    Serial.print("messageIndex: ");
+    Serial.println(messageIndex);
+
+   if (messageIndex > 0) {
+     gprs.readSMS(messageIndex, message, MESSAGE_LENGTH, phone, datetime);
+
+     // выводим номер, с которого пришло смс
+     Serial.print("From number: ");
+     Serial.println(phone);
+    
+     // выводим дату, когда пришло смс
+     Serial.print("Datetime: ");
+     Serial.println(datetime);
+    
+     // выводим текст сообщения
+     Serial.print("Recieved Message: ");
+     Serial.println(message); 
+     
+     Command cmdFromSms = parseSms(message);
+     printCmd(cmdFromSms);
+     
+     gprs.deleteSMS(messageIndex);
+   }
+
 }
 
 void test() {
@@ -201,14 +242,20 @@ int updateZone(Zone * zone, DHT11 * dhtP) {
       // ошибка контрольной суммы
       case DHT_ERROR_CHECKSUM:
         Serial.println("Checksum error");
+        zone->last_temp = 0;
+        zone->last_hum = 0;
         break;
       // превышение времени ожидания
       case DHT_ERROR_TIMEOUT:
         Serial.println("Time out error");
+        zone->last_temp = 0;
+        zone->last_hum = 0;
         break;
       // неизвестная ошибка
       default:
         Serial.println("Unknown error");
+        zone->last_temp = 0;
+        zone->last_hum = 0;
         break;
     }     
     
@@ -222,8 +269,33 @@ int updateZone(Zone * zone, DHT11 * dhtP) {
     } else {
         digitalWrite(zone->relay_pin, LOW);
     }
+    
+    zone->last_read_result = check;
 
     return check;
+}
+
+void printZone(uint8_t index, Zone * zone) {
+  lcd.setCursor(0, index);
+  lcd.print(index + 1);
+  lcd.print(": ");
+  if (zone->last_read_result != DHT_OK) {
+     lcd.print("\xED"); 
+  } else if (zone->target_temp > 0) {
+    if (zone->target_temp > zone->last_temp) {
+      lcd.print("\x94"); 
+    } else {
+      lcd.print("\x2F"); 
+    }
+  } else {
+    lcd.print("\x8A");
+  } 
+
+  lcd.print(" t=");
+  lcd.print(zone->last_temp);
+  lcd.print("\x99""C H=");
+  lcd.print(zone->last_hum);
+  lcd.print("%");
 }
 
 
