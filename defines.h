@@ -3,6 +3,8 @@
 
 #define MESSAGE_LENGTH 160
 
+#define ZONES 2
+
 typedef struct Zone {
   uint8_t dht_pin;
   uint8_t relay_pin;
@@ -22,8 +24,8 @@ typedef enum Opcode{
 
 typedef struct Command {
   Opcode code;
-  uint8_t zone;
-  uint8_t arg;
+  uint8_t zone; //1-based, 0 if none/all
+  uint8_t arg;  //e.g. temp
 };
 
 Command UNKNOWN_COMMAND = {k_op_unknown, 0, 0};

@@ -21,17 +21,9 @@ char phone[16];               // номер, с которого пришло с
 char datetime[24];            // дата отправки сообщения
 LiquidCrystal lcd(A5, A4, A3, A2, A1, A0);
 
-struct Zone zones[2];
-DHT11 * dhts[2];
+struct Zone zones[ZONES];
+DHT11 * dhts[ZONES];
 
-void setup() {
-  setupLCD();
-  setupZones();
-  setupSerialAndWait();
-  setupGPRS();
-  
-//  test();
-}
 
 void setupLCD() {
     lcd.begin(20, 4);
@@ -52,7 +44,7 @@ void setupZones() {
   zones[0] = {4, 5, 0, 0, 0};
   zones[1] = {6, 7, 0, 0, 0};
   
-  for (int z = 0; z < 2; z++) {
+  for (int z = 0; z < ZONES; z++) {
     Zone zone = zones[z];
     dhts[z] = new DHT11(zone.dht_pin);
     dhts[z]->begin();
@@ -66,24 +58,6 @@ void setupSerialAndWait() {
   while (!Serial) {
     delay(1000);
   }
-}
-
-
-
-void loop() {
-  checkSMS();
-  
-//  for (int z = 0; z < 2; z++) {
-//    Serial.print("Zone ");
-//    Serial.print(z);
-//    Serial.print(":\n  ");
-//    printZone(&zones[z]);
-//    int updateResult = updateZone(&zones[z], dhts[z]);    
-//    
-//    printZone (z, &zones[z]);
-//  }
-//  
-  delay(5000);
 }
 
 void checkSMS() {
@@ -110,10 +84,9 @@ void checkSMS() {
      
      Command cmdFromSms = parseSms(message);
      printCmd(cmdFromSms);
-     
+     processCommand(cmdFromSms);
      gprs.deleteSMS(messageIndex);
    }
-
 }
 
 void test() {
@@ -227,6 +200,54 @@ void printCmd(Command cmd) {
   };
 }
 
+boolean processCommand(Command cmd) {
+  Zone * z = NULL;
+  if (cmd.zone > ZONES) {
+    reply("Incorrect zone");
+  }else if (cmd.zone > 0) {
+    z = &zones[cmd.zone - 1];
+  }
+
+  switch (cmd.code) {
+      case k_op_heat_on:
+        if (z == NULL) {
+          reply("Specify a zone");
+        } else  if (cmd.arg <= 0 || cmd.arg > 30) { 
+          reply("Specify temperature between 1 and 30 C");
+        } else {
+          z->target_temp = cmd.arg;
+          reply("OK");
+        }
+        break;
+      case k_op_heat_off:
+        if (z == NULL) {
+          reply("Specify a zone");
+        } else {
+          z->target_temp = 0;
+          reply("OK");
+        }
+        break;
+      case k_op_all_off:
+        for (int i = 0; i < ZONES; i++) {
+          (&zones[i])->target_temp = 0;
+        }
+        reply("OK");
+        break;
+      case k_op_status:
+        reply("Here will be status");
+        break;
+      case k_op_unknown:
+      default:
+        reply("Unknown command");
+        break;
+  };
+}
+
+void reply(char * text) {
+  Serial.print("reply: ");
+  Serial.println(text);
+}
+
 int updateZone(Zone * zone, DHT11 * dhtP) {
     int check;
      
@@ -296,6 +317,28 @@ void printZone(uint8_t index, Zone * zone) {
   lcd.print("\x99""C H=");
   lcd.print(zone->last_hum);
   lcd.print("%");
+}
+
+void setup() {
+  setupLCD();
+  setupZones();
+  setupSerialAndWait();
+  setupGPRS();
+}
+
+void loop() {
+ checkSMS();
+  
+ for (int z = 0; z < ZONES; z++) {
+   int updateResult = updateZone(&zones[z], dhts[z]);    
+
+   Serial.print("Zone ");
+   Serial.print(z + 1);
+   Serial.print(":  ");
+   printZone(&zones[z]);
+ }
+
+ delay(5000);
 }
 
 
