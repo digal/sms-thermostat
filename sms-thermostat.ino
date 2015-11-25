@@ -24,6 +24,8 @@ LiquidCrystal lcd(A5, A4, A3, A2, A1, A0);
 struct Zone zones[ZONES];
 DHT11 * dhts[ZONES];
 
+//status stuff
+bool blink;
 
 void setupLCD() {
     lcd.begin(20, 4);
@@ -31,9 +33,11 @@ void setupLCD() {
 
 void setupGPRS() {
   gprs.powerUpDown();
+  lcd.print(".");
   
   Serial.println("initializing GPRS");
   while (gprs.init() != true) {
+    lcd.print(".");
     Serial.println("error initializing GPRS");
     delay(1000);
   }
@@ -55,17 +59,17 @@ void setupZones() {
 void setupSerialAndWait() {
   Serial.begin(9600);
 
-  while (!Serial) {
-    delay(1000);
-  }
+  // while (!Serial) {
+  //   delay(1000);
+  // }
 }
 
-void checkSMS() {
+bool checkSMS() {
   
-   messageIndex = gprs.isSMSunread();
+  messageIndex = gprs.isSMSunread();
    
-    Serial.print("messageIndex: ");
-    Serial.println(messageIndex);
+  Serial.print("messageIndex: ");
+  Serial.println(messageIndex);
 
    if (messageIndex > 0) {
      gprs.readSMS(messageIndex, message, MESSAGE_LENGTH, phone, datetime);
@@ -86,7 +90,14 @@ void checkSMS() {
      printCmd(cmdFromSms);
      processCommand(cmdFromSms);
      gprs.deleteSMS(messageIndex);
+
+     // message = "";
+     return true;
+   } else {
+     return false;
    }
+
+
 }
 
 void test() {
@@ -161,18 +172,19 @@ Command parseSms(char* message) {
   }  
 }
 
-void printZone(Zone * z) {
-   // выводим показания влажности и температуры
-  Serial.print("Target temp = ");
-  Serial.print(z->target_temp);
-  Serial.print("C \t");
-  Serial.print("Temperature = ");
-  Serial.print(z->last_temp);
-  Serial.print("C \t");
-  Serial.print("Humidity = ");
-  Serial.print(z->last_hum);
-  Serial.println("%");
- 
+void status(char * buf) {
+  int offset = 0;
+  for (int i = 0; i < ZONES; i++) {
+    Zone * z = &zones[i];
+
+    offset += sprintf(
+      buf + offset, 
+      "Zone %d: T=%dC; H=%d%% %s\n", 
+      (i + 1), 
+      z->last_temp, 
+      z->last_hum, 
+      (z->target_temp > 0 ? "ON" : "OFF"));
+  }
 }
 
 void printCmd(Command cmd) {
@@ -200,10 +212,14 @@ void printCmd(Command cmd) {
   };
 }
 
-boolean processCommand(Command cmd) {
+void processCommand(Command cmd) {
   Zone * z = NULL;
+  char reply[160];
+
   if (cmd.zone > ZONES) {
-    reply("Incorrect zone");
+    sprintf(reply, "Specify a zone between 1 and %d", ZONES);
+    gprs.sendSMS(phone, reply);
+    return;
   }else if (cmd.zone > 0) {
     z = &zones[cmd.zone - 1];
   }
@@ -211,41 +227,38 @@ boolean processCommand(Command cmd) {
   switch (cmd.code) {
       case k_op_heat_on:
         if (z == NULL) {
-          reply("Specify a zone");
+          sprintf(reply, "Specify a zone between 1 and %d", ZONES);
         } else  if (cmd.arg <= 0 || cmd.arg > 30) { 
-          reply("Specify temperature between 1 and 30 C");
+          sprintf(reply, "Specify temperature between %d and %d C", 1, 30);
         } else {
           z->target_temp = cmd.arg;
-          reply("OK");
+          sprintf(reply, "Heating zone %d up to %d C", (cmd.zone), cmd.arg);
         }
         break;
       case k_op_heat_off:
         if (z == NULL) {
-          reply("Specify a zone");
+          sprintf(reply, "Specify a zone between 1 and %d", ZONES);
         } else {
           z->target_temp = 0;
-          reply("OK");
+          sprintf(reply, "Stopping heating in zone %d", (cmd.zone));
         }
         break;
       case k_op_all_off:
         for (int i = 0; i < ZONES; i++) {
           (&zones[i])->target_temp = 0;
         }
-        reply("OK");
+        sprintf(reply, "Stopping heating in all zones");
         break;
       case k_op_status:
-        reply("Here will be status");
+        status(reply);
         break;
       case k_op_unknown:
       default:
-        reply("Unknown command");
+        sprintf(reply, "Unknown command");
         break;
   };
-}
 
-void reply(char * text) {
-  Serial.print("reply: ");
-  Serial.println(text);
+  gprs.sendSMS(phone, reply);
 }
 
 int updateZone(Zone * zone, DHT11 * dhtP) {
@@ -296,8 +309,8 @@ int updateZone(Zone * zone, DHT11 * dhtP) {
     return check;
 }
 
-void printZone(uint8_t index, Zone * zone) {
-  lcd.setCursor(0, index);
+void printZoneLCD(uint8_t index, Zone * zone) {
+  lcd.setCursor(0, index + 2);
   lcd.print(index + 1);
   lcd.print(": ");
   if (zone->last_read_result != DHT_OK) {
@@ -314,29 +327,78 @@ void printZone(uint8_t index, Zone * zone) {
 
   lcd.print(" t=");
   lcd.print(zone->last_temp);
-  lcd.print("\x99""C H=");
+  lcd.print("\x99""C ");
+
+  lcd.setCursor(12, index+2);
+  lcd.print("H=");
   lcd.print(zone->last_hum);
   lcd.print("%");
+
+  lcd.print("   ");
 }
 
 void setup() {
   setupLCD();
+  lcd.setCursor(0, 0);
+  lcd.print("       Hello!");
+  lcd.setCursor(0, 1);
+  lcd.print("Zones ...");
   setupZones();
+  lcd.print(" OK");
+
+  lcd.setCursor(0, 2);
+  lcd.print("Serial ...");
   setupSerialAndWait();
+  lcd.print(" OK");
+
+  lcd.setCursor(0, 3);
+  lcd.print("GSM .");
   setupGPRS();
+  lcd.print(" OK");
+
+  lcd.clear();
 }
 
 void loop() {
- checkSMS();
+
+ Serial.print("signal: ");
+ byte strength = gprs.getSignalStrength();
+ Serial.println(strength);
+
+ bool sms = checkSMS();
   
+ blink = !blink;
+
+ lcd.setCursor(0, 0);
+ lcd.print(blink ? "\x92" : "\x93");
+ lcd.print(" ");
+
+ if (strength == 99) {
+   lcd.print("?");
+ } else if (strength >= 20) {
+   lcd.print("\x83");
+ } else if (strength >= 15) {
+   lcd.print("\x82");
+ } else if (strength >= 10) {
+   lcd.print("\x81");
+ } else {
+   lcd.print("\x80");
+ }
+
+ if (sms) {
+   lcd.print(" \xED");
+ } else {
+   lcd.print("  ");
+ }
+
  for (int z = 0; z < ZONES; z++) {
    int updateResult = updateZone(&zones[z], dhts[z]);    
-
-   Serial.print("Zone ");
-   Serial.print(z + 1);
-   Serial.print(":  ");
-   printZone(&zones[z]);
+   printZoneLCD(z, &zones[z]);
  }
+
+ char buf[160];
+ status(buf);
+ Serial.print(buf);
 
  delay(5000);
 }
