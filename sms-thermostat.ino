@@ -72,26 +72,32 @@ bool checkSMS() {
   Serial.println(messageIndex);
 
    if (messageIndex > 0) {
-     gprs.readSMS(messageIndex, message, MESSAGE_LENGTH, phone, datetime);
+     if (gprs.readSMS(messageIndex, message, MESSAGE_LENGTH, phone, datetime)) {
+        for (char *p = message; *p; ++p) {
+          *p = tolower(*p);
+        }
 
-     // выводим номер, с которого пришло смс
-     Serial.print("From number: ");
-     Serial.println(phone);
-    
-     // выводим дату, когда пришло смс
-     Serial.print("Datetime: ");
-     Serial.println(datetime);
-    
-     // выводим текст сообщения
-     Serial.print("Recieved Message: ");
-     Serial.println(message); 
+        // выводим номер, с которого пришло смс
+        Serial.print("From number: ");
+        Serial.println(phone);
+
+        // выводим дату, когда пришло смс
+        Serial.print("Datetime: ");
+        Serial.println(datetime);
+
+        // выводим текст сообщения
+        Serial.print("Recieved Message: ");
+        Serial.println(message); 
+
+        Command cmdFromSms = parseSms(message);
+        printCmd(cmdFromSms);
+        processCommand(cmdFromSms);
+      } else {
+        Serial.println("did not read message");
+      }
+
      
-     Command cmdFromSms = parseSms(message);
-     printCmd(cmdFromSms);
-     processCommand(cmdFromSms);
      gprs.deleteSMS(messageIndex);
-
-     // message = "";
      return true;
    } else {
      return false;
@@ -100,34 +106,34 @@ bool checkSMS() {
 
 }
 
-void test() {
-  Command cmd;
+// void test() {
+//   Command cmd;
 
-  cmd = parseSms("heat 1 25");
-  printCmd(cmd);
+//   cmd = parseSms("heat 1 25");
+//   printCmd(cmd);
 
-  cmd = parseSms("heat 1");
-  printCmd(cmd);
+//   cmd = parseSms("heat 1");
+//   printCmd(cmd);
 
-  cmd = parseSms("off 1");
-  printCmd(cmd);
+//   cmd = parseSms("off 1");
+//   printCmd(cmd);
 
-  cmd = parseSms("off");
-  printCmd(cmd);
+//   cmd = parseSms("off");
+//   printCmd(cmd);
 
-  cmd = parseSms("status");
-  printCmd(cmd);
+//   cmd = parseSms("status");
+//   printCmd(cmd);
 
-//malformed messages
-  cmd = parseSms("abracadabra");
-  printCmd(cmd);
+// //malformed messages
+//   cmd = parseSms("abracadabra");
+//   printCmd(cmd);
 
-  cmd = parseSms("heat");
-  printCmd(cmd);
+//   cmd = parseSms("heat");
+//   printCmd(cmd);
 
-  cmd = parseSms("heat lol");
-  printCmd(cmd);
-}
+//   cmd = parseSms("heat lol");
+//   printCmd(cmd);
+// }
 
 //SMS stuff
 Command parseSms(char* message) {  

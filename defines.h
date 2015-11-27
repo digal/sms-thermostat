@@ -1,7 +1,7 @@
 #define GPRS_TX 11  
 #define GPRS_RX 10
 
-#define MESSAGE_LENGTH 160
+#define MESSAGE_LENGTH 20
 
 #define ZONES 2
 
