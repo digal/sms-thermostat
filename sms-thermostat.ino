@@ -16,7 +16,7 @@ const uint8_t k_default_temp = 20;
 
 GPRS gprs(2, 3, 10, 11, 9600);
 int messageIndex = 0;         // номер сообщения в памяти сим-карты
-char message[MESSAGE_LENGTH]; // текст сообщения
+char message[OUT_MESSAGE_LENGTH]; // текст сообщения
 char phone[16];               // номер, с которого пришло сообщение
 char datetime[24];            // дата отправки сообщения
 LiquidCrystal lcd(A5, A4, A3, A2, A1, A0);
@@ -72,7 +72,8 @@ bool checkSMS() {
   Serial.println(messageIndex);
 
    if (messageIndex > 0) {
-     if (gprs.readSMS(messageIndex, message, MESSAGE_LENGTH, phone, datetime)) {
+
+     if (gprs.readSMS(messageIndex, message, IN_MESSAGE_LENGTH, phone, datetime)) {
         for (char *p = message; *p; ++p) {
           *p = tolower(*p);
         }
@@ -96,44 +97,17 @@ bool checkSMS() {
         Serial.println("did not read message");
       }
 
-     
-     gprs.deleteSMS(messageIndex);
+    if (gprs.deleteSMS(messageIndex)) {
+      Serial.println("did delete message");
+    } else {
+      Serial.println("did not delete message");
+    }
+
      return true;
    } else {
      return false;
    }
-
-
 }
-
-// void test() {
-//   Command cmd;
-
-//   cmd = parseSms("heat 1 25");
-//   printCmd(cmd);
-
-//   cmd = parseSms("heat 1");
-//   printCmd(cmd);
-
-//   cmd = parseSms("off 1");
-//   printCmd(cmd);
-
-//   cmd = parseSms("off");
-//   printCmd(cmd);
-
-//   cmd = parseSms("status");
-//   printCmd(cmd);
-
-// //malformed messages
-//   cmd = parseSms("abracadabra");
-//   printCmd(cmd);
-
-//   cmd = parseSms("heat");
-//   printCmd(cmd);
-
-//   cmd = parseSms("heat lol");
-//   printCmd(cmd);
-// }
 
 //SMS stuff
 Command parseSms(char* message) {  
@@ -219,12 +193,16 @@ void printCmd(Command cmd) {
 }
 
 void processCommand(Command cmd) {
-  Zone * z = NULL;
-  char reply[160];
+  Zone * z = NULL;  
 
   if (cmd.zone > ZONES) {
-    sprintf(reply, "Specify a zone between 1 and %d", ZONES);
-    gprs.sendSMS(phone, reply);
+    sprintf(message, "Specify a zone between 1 and %d", ZONES);
+    if (gprs.sendSMS(phone, message)) {
+      Serial.println("did send sms");
+    } else  {
+      Serial.println("did not send sms");
+    }
+    delay(1000);
     return;
   }else if (cmd.zone > 0) {
     z = &zones[cmd.zone - 1];
@@ -233,38 +211,44 @@ void processCommand(Command cmd) {
   switch (cmd.code) {
       case k_op_heat_on:
         if (z == NULL) {
-          sprintf(reply, "Specify a zone between 1 and %d", ZONES);
+          sprintf(message, "Specify a zone between 1 and %d", ZONES);
         } else  if (cmd.arg <= 0 || cmd.arg > 30) { 
-          sprintf(reply, "Specify temperature between %d and %d C", 1, 30);
+          sprintf(message, "Specify temperature between %d and %d C", 1, 30);
         } else {
           z->target_temp = cmd.arg;
-          sprintf(reply, "Heating zone %d up to %d C", (cmd.zone), cmd.arg);
+          sprintf(message, "Heating zone %d up to %d C", (cmd.zone), cmd.arg);
         }
         break;
       case k_op_heat_off:
         if (z == NULL) {
-          sprintf(reply, "Specify a zone between 1 and %d", ZONES);
+          sprintf(message, "Specify a zone between 1 and %d", ZONES);
         } else {
           z->target_temp = 0;
-          sprintf(reply, "Stopping heating in zone %d", (cmd.zone));
+          sprintf(message, "Stopping heating in zone %d", (cmd.zone));
         }
         break;
       case k_op_all_off:
         for (int i = 0; i < ZONES; i++) {
           (&zones[i])->target_temp = 0;
         }
-        sprintf(reply, "Stopping heating in all zones");
+        sprintf(message, "Stopping heating in all zones");
         break;
       case k_op_status:
-        status(reply);
+        status(message);
         break;
       case k_op_unknown:
       default:
-        sprintf(reply, "Unknown command");
+        sprintf(message, "Unknown command");
         break;
   };
 
-  gprs.sendSMS(phone, reply);
+  Serial.print("reply: ");Serial.println(message);
+  if (gprs.sendSMS(phone, message)) {
+    Serial.println("did send sms");
+  } else  {
+    Serial.println("did not send sms");
+  }
+  delay(1000);
 }
 
 int updateZone(Zone * zone, DHT11 * dhtP) {
@@ -320,12 +304,12 @@ void printZoneLCD(uint8_t index, Zone * zone) {
   lcd.print(index + 1);
   lcd.print(": ");
   if (zone->last_read_result != DHT_OK) {
-     lcd.print("\xED"); 
+     lcd.print("?"); 
   } else if (zone->target_temp > 0) {
-    if (zone->target_temp > zone->last_temp) {
+    if (zone->target_temp <= zone->last_temp) {
       lcd.print("\x94"); 
     } else {
-      lcd.print("\x2F"); 
+      lcd.print("\x1F"); 
     }
   } else {
     lcd.print("\x8A");
