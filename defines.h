@@ -2,9 +2,13 @@
 #define GPRS_RX 10
 
 #define IN_MESSAGE_LENGTH 20
-#define OUT_MESSAGE_LENGTH 50
+#define OUT_MESSAGE_LENGTH 100
 
 #define ZONES 2
+
+#define LOOP_DELAY 2000
+#define MAX_ON_HOURS 4
+#define MAX_ON_LOOPS (long)4 * 60 * 60 * 1000 / LOOP_DELAY
 
 typedef struct Zone {
   uint8_t dht_pin;
@@ -12,6 +16,7 @@ typedef struct Zone {
   uint8_t target_temp;
   uint8_t last_temp;
   uint8_t last_hum;
+  long on_loops_count;
   int last_read_result;
 };
 

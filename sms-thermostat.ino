@@ -1,3 +1,7 @@
+//TODO:
+//Гистерезис (не включать реле если текущая температура меньше целевой меньше чем на 3 градуса)
+//Автовыкл зоны через ~4 часа
+
 #include <LiquidCrystal.h>
 
 #include <SoftwareSerial.h>
@@ -74,6 +78,14 @@ bool checkSMS() {
    if (messageIndex > 0) {
 
      if (gprs.readSMS(messageIndex, message, IN_MESSAGE_LENGTH, phone, datetime)) {
+        delay(200);
+
+        if (gprs.deleteSMS(messageIndex)) {
+          Serial.println("did delete message");
+        } else {
+          Serial.println("did not delete message");
+        }
+
         for (char *p = message; *p; ++p) {
           *p = tolower(*p);
         }
@@ -83,8 +95,8 @@ bool checkSMS() {
         Serial.println(phone);
 
         // выводим дату, когда пришло смс
-        Serial.print("Datetime: ");
-        Serial.println(datetime);
+        // Serial.print("Datetime: ");
+        // Serial.println(datetime);
 
         // выводим текст сообщения
         Serial.print("Recieved Message: ");
@@ -94,14 +106,16 @@ bool checkSMS() {
         printCmd(cmdFromSms);
         processCommand(cmdFromSms);
       } else {
+        delay(200);
+
+        if (gprs.deleteSMS(messageIndex)) {
+          Serial.println("did delete message");
+        } else {
+          Serial.println("did not delete message");
+        }
+
         Serial.println("did not read message");
       }
-
-    if (gprs.deleteSMS(messageIndex)) {
-      Serial.println("did delete message");
-    } else {
-      Serial.println("did not delete message");
-    }
 
      return true;
    } else {
@@ -211,11 +225,16 @@ void processCommand(Command cmd) {
   switch (cmd.code) {
       case k_op_heat_on:
         if (z == NULL) {
-          sprintf(message, "Specify a zone between 1 and %d", ZONES);
+          for (int i = 0; i < ZONES; i++) {
+            (&zones[i])->target_temp = k_default_temp;
+            (&zones[i])->on_loops_count = 0;
+          }
+          sprintf(message, "Heating all zones up to %d C", cmd.arg);
         } else  if (cmd.arg <= 0 || cmd.arg > 30) { 
           sprintf(message, "Specify temperature between %d and %d C", 1, 30);
         } else {
           z->target_temp = cmd.arg;
+          z->on_loops_count = 0;
           sprintf(message, "Heating zone %d up to %d C", (cmd.zone), cmd.arg);
         }
         break;
@@ -252,6 +271,11 @@ void processCommand(Command cmd) {
 }
 
 int updateZone(Zone * zone, DHT11 * dhtP) {
+    zone->on_loops_count += 1;
+    if (zone->on_loops_count >= MAX_ON_LOOPS) {
+      zone->target_temp = 0;
+    }
+
     int check;
      
     DHT11 dht = *dhtP;
@@ -381,16 +405,20 @@ void loop() {
    lcd.print("  ");
  }
 
+  if (messageIndex > 0) {
+    lcd.print(" #");
+    lcd.print(messageIndex);
+    lcd.print("  ");
+  } else {
+    lcd.print("      ");
+  }
+
  for (int z = 0; z < ZONES; z++) {
    int updateResult = updateZone(&zones[z], dhts[z]);    
    printZoneLCD(z, &zones[z]);
  }
 
- char buf[160];
- status(buf);
- Serial.print(buf);
-
- delay(5000);
+ delay(LOOP_DELAY);
 }
 
 
