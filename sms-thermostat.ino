@@ -311,9 +311,14 @@ int updateZone(Zone * zone, DHT11 * dhtP) {
     //установлена целевая температура
     //актуальная температура меньше целевой
     if (check == DHT_OK
-        && zone->target_temp > 0
-        && zone->target_temp > zone->last_temp) {
-        digitalWrite(zone->relay_pin, HIGH);
+        && zone->target_temp > 0) {
+        if (zone->last_temp >= zone->target_temp) {
+          digitalWrite(zone->relay_pin, LOW);
+        } else if (zone->last_temp < (zone->target_temp - 3)) {
+          digitalWrite(zone->relay_pin, HIGH);
+        } else {
+          //DO NOTHING if t is between tt-3 and tt
+        }
     } else {
         digitalWrite(zone->relay_pin, LOW);
     }
