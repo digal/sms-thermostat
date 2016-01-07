@@ -142,11 +142,9 @@ Command parseSms(char* message) {
         //TODO: zone and temp bounds
          temp = atoi(tempStr); 
       }
-      
-      return {k_op_heat_on, zone, temp};
-    } else {
-      return UNKNOWN_COMMAND; 
     }
+    return {k_op_heat_on, zone, temp};
+
   } else if (sizeof(cmdStr) >= sizeof(k_cmd_heat_off)
       && memcmp(cmdStr, k_cmd_heat_off, sizeof(k_cmd_heat_off)) == 0) {
         
@@ -224,7 +222,7 @@ void processCommand(Command cmd) {
 
   switch (cmd.code) {
       case k_op_heat_on:
-        if (z == NULL) {
+        if (cmd.zone == 0) {
           for (int i = 0; i < ZONES; i++) {
             (&zones[i])->target_temp = k_default_temp;
             (&zones[i])->on_loops_count = 0;
