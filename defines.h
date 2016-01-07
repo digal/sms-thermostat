@@ -6,9 +6,10 @@
 
 #define ZONES 2
 
-#define LOOP_DELAY 2000
-#define MAX_ON_HOURS 4
-#define MAX_ON_LOOPS (long)4 * 60 * 60 * 1000 / LOOP_DELAY
+#define LOOP_BUSY_TIME 515L //measured
+#define LOOP_DELAY 2000L
+#define MAX_ON_HOURS 1L
+#define MAX_ON_LOOPS (MAX_ON_HOURS * 60L * 60L * 1000L / (LOOP_DELAY + LOOP_BUSY_TIME))
 
 typedef struct Zone {
   uint8_t dht_pin;

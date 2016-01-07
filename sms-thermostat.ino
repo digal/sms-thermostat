@@ -24,7 +24,7 @@ char message[OUT_MESSAGE_LENGTH]; // текст сообщения
 char phone[16];               // номер, с которого пришло сообщение
 char datetime[24];            // дата отправки сообщения
 LiquidCrystal lcd(A5, A4, A3, A2, A1, A0);
-
+long time = 0;
 struct Zone zones[ZONES];
 DHT11 * dhts[ZONES];
 
@@ -271,9 +271,11 @@ void processCommand(Command cmd) {
 }
 
 int updateZone(Zone * zone, DHT11 * dhtP) {
-    zone->on_loops_count += 1;
-    if (zone->on_loops_count >= MAX_ON_LOOPS) {
-      zone->target_temp = 0;
+    if (zone->target_temp > 0) {
+      zone->on_loops_count += 1;
+      if (zone->on_loops_count >= MAX_ON_LOOPS) {
+        zone->target_temp = 0;
+      }
     }
 
     int check;
@@ -376,10 +378,12 @@ void setup() {
   lcd.print(" OK");
 
   lcd.clear();
+
+  Serial.print("max loops: "); Serial.println(MAX_ON_LOOPS);
 }
 
 void loop() {
-
+ 
  Serial.print("signal: ");
  byte strength = gprs.getSignalStrength();
  Serial.println(strength);
@@ -424,6 +428,9 @@ void loop() {
  }
 
  delay(LOOP_DELAY);
+ long newTime = millis();
+ Serial.print("time: "); Serial.println(newTime - time);
+ time = newTime;
 }
 
 
