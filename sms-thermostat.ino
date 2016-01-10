@@ -15,7 +15,7 @@ const char* k_cmd_heat_on = "heat";
 const char* k_cmd_heat_off = "off";
 const char* k_cmd_status = "status";
 const char* k_delimiters = " ";
-const uint8_t k_default_temp = 20;
+const uint8_t k_default_temp = 15;
 
 
 GPRS gprs(2, 3, 10, 11, 9600);
@@ -214,7 +214,7 @@ void processCommand(Command cmd) {
     } else  {
       Serial.println("did not send sms");
     }
-    delay(1000);
+    delay(500);
     return;
   }else if (cmd.zone > 0) {
     z = &zones[cmd.zone - 1];
@@ -222,7 +222,7 @@ void processCommand(Command cmd) {
 
   switch (cmd.code) {
       case k_op_heat_on:
-        if (cmd.zone == 0) {
+        if (cmd.zone == 0) {  
           for (int i = 0; i < ZONES; i++) {
             (&zones[i])->target_temp = k_default_temp;
             (&zones[i])->on_loops_count = 0;
@@ -259,13 +259,15 @@ void processCommand(Command cmd) {
         break;
   };
 
-  Serial.print("reply: ");Serial.println(message);
-  if (gprs.sendSMS(phone, message)) {
-    Serial.println("did send sms");
-  } else  {
-    Serial.println("did not send sms");
+  if (cmd.code != k_op_unknown) {
+    Serial.print("reply: ");Serial.println(message);
+    if (gprs.sendSMS(phone, message)) {
+      Serial.println("did send sms");
+    } else  {
+      Serial.println("did not send sms");
+    }
   }
-  delay(1000);
+  delay(500);
 }
 
 int updateZone(Zone * zone, DHT11 * dhtP) {
@@ -273,7 +275,11 @@ int updateZone(Zone * zone, DHT11 * dhtP) {
       zone->on_loops_count += 1;
       if (zone->on_loops_count >= MAX_ON_LOOPS) {
         zone->target_temp = 0;
+        zone->on_loops_count = 0;
       }
+      // lcd.setCursor(0, 1);
+      // lcd.print(zone->on_loops_count);
+
     }
 
     int check;
@@ -428,6 +434,10 @@ void loop() {
  delay(LOOP_DELAY);
  long newTime = millis();
  Serial.print("time: "); Serial.println(newTime - time);
+ lcd.setCursor(0, 1);
+ lcd.print(newTime - time);
+ lcd.print("    ");
+
  time = newTime;
 }
 
